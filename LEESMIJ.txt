@@ -1,0 +1,15 @@
+SFTR City Expansion v5 — Telegram Mini App voorbereiding
+
+Inbegrepen:
+- 3D-stad met 12 upgradebare gebouwen
+- Gebouwen groeien bij upgrades; extra rijen ramen worden toegevoegd
+- Vault en Raid
+- Autosave van testcoins en gebouwlevels in de browser (localStorage)
+- Telegram Mini App SDK-integratie: ready/expand, themakleuren en viewport-aanpassing
+- Blijft ook buiten Telegram in een gewone browser te testen
+- Voortgang wordt herladen als je dezelfde browser op hetzelfde toestel opnieuw opent
+
+Open index.html in een browser met internetverbinding (Three.js wordt via CDN geladen).
+
+Belangrijk:
+Dit is nog een prototype. Autosave is lokaal op het toestel/de browser en is dus nog geen account-save die tussen toestellen synchroniseert. Voor een echte Telegram Mini App moet deze map op een HTTPS-webadres worden gehost en moet de Mini App-link aan de bestaande bot worden gekoppeld via BotFather. Online accountopslag/backend is nog niet inbegrepen; de save blijft lokaal. Deel nooit je Telegram bot-token in de gamebestanden. De Telegram-integratie kan pas echt getest worden nadat de pagina via HTTPS in Telegram geopend wordt.

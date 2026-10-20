@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#050b18">
+<title>SFTR — City Expansion v4</title>
+<style>
+:root{--cyan:#23d9ff;--gold:#ffb52e;--bg:#050b18}*{box-sizing:border-box}body{margin:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);background:var(--bg);color:#e9faff;font:14px system-ui,-apple-system,Segoe UI,sans-serif;overflow:hidden}
+#scene{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;overscroll-behavior:contain}
+.hud{position:fixed;z-index:2;left:12px;right:12px;top:12px;display:flex;justify-content:space-between;gap:8px;pointer-events:none}.pill{background:#061326d9;border:1px solid #27cfff88;box-shadow:0 0 16px #009dff25;border-radius:12px;padding:9px 12px;backdrop-filter:blur(8px);font-weight:700}.brand{color:var(--cyan);letter-spacing:2px}.money{color:var(--gold)}
+.bottom{position:fixed;z-index:2;bottom:12px;left:12px;right:12px;background:linear-gradient(180deg,#061326e8,#020814f5);border:1px solid #22cfff66;border-radius:18px;padding:12px;box-shadow:0 0 28px #007bff2b}.tabs{display:flex;gap:7px;margin-bottom:10px}.tab,button{border:1px solid #2acfff66;background:#0a2340;color:#dffaff;border-radius:10px;padding:10px 12px;font-weight:750;cursor:pointer}.tab{flex:1;font-size:12px}.tab.active,button.primary{background:linear-gradient(135deg,#087bb4,#0954a8);border-color:var(--cyan);box-shadow:0 0 14px #00bfff36}.panel{display:flex;align-items:center;gap:10px;min-height:62px}.copy{flex:1}.copy b{display:block;font-size:15px;margin-bottom:3px}.muted{color:#9db9d1;font-size:12px;line-height:1.35}.actions{display:flex;gap:7px;flex-wrap:wrap}.actions button{font-size:12px;padding:10px}.gold{border-color:#ffbb3b88;background:#422b08;color:#ffe0a0}.toast{position:fixed;z-index:5;top:75px;left:50%;transform:translateX(-50%);background:#061326ee;border:1px solid var(--gold);padding:10px 15px;border-radius:12px;opacity:0;transition:.25s;pointer-events:none;white-space:nowrap}.toast.show{opacity:1}.hint{position:fixed;z-index:2;top:67px;left:14px;color:#b5d7ec;text-shadow:0 2px 6px #000;font-size:11px;max-width:75%}
+@media(min-width:700px){.bottom{left:50%;right:auto;transform:translateX(-50%);width:min(620px,calc(100% - 24px))}.hint{top:76px}.hud{left:22px;right:22px;top:20px}}
+
+.raid-board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:10px;width:100%}
+.raid-target{min-height:52px;border:1px solid #27516b;border-radius:12px;background:linear-gradient(145deg,#102b43,#0b1427);color:#eaf8ff;font-size:14px;font-weight:800;box-shadow:inset 0 0 14px #12304a;touch-action:manipulation}
+.raid-target:active{transform:scale(.97)}
+.raid-target.revealed{background:linear-gradient(145deg,#2c291b,#142a38);border-color:#f5b942}
+.raid-target:disabled{opacity:.85}
+.raid-note{font-size:11px;color:#a9c5d8;margin-top:7px}
+.city-stats{font-size:11px;color:#a9c5d8;margin-top:4px}.city-stats strong{color:#ffcf62}
+@media(max-height:760px){.raid-target{min-height:43px}.raid-board{gap:5px}}
+
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div class="hud"><div class="pill brand">SFTR <span style="color:#fff;font-size:10px">CITY EXPANSION v5</span></div><div class="pill">🪙 <span class="money" id="coins">12.450</span></div></div>
+<div class="hint" id="hint">1 vinger: draai de stad · 2 vingers: zoom in/uit</div>
+<div class="toast" id="toast">Welkom in SFTR</div>
+<div class="bottom">
+ <div class="tabs"><button class="tab active" data-mode="city">🌆 Stad</button><button class="tab" data-mode="vault">⚙️ Vault</button><button class="tab" data-mode="raid">🎰 Raid</button></div>
+ <div class="panel"><div class="copy"><b id="title">Neon District</b><div class="muted" id="desc">Bouw je basis uit. Tik op een gebouw om het te upgraden.</div></div><div class="actions" id="actions"><button class="primary" id="upgrade">Upgrade · 500</button></div></div>
+</div>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+(()=> {
+const $=s=>document.querySelector(s), canvas=$('#scene');
+// Telegram Mini App compatibility: safe initialization; game also works in a normal browser.
+const tg=window.Telegram&&window.Telegram.WebApp?window.Telegram.WebApp:null;
+if(tg){
+  try{tg.ready();tg.expand();if(tg.setHeaderColor)tg.setHeaderColor('#050b18');if(tg.setBackgroundColor)tg.setBackgroundColor('#050b18');if(tg.enableClosingConfirmation)tg.enableClosingConfirmation();}catch(e){console.warn('Telegram WebApp init:',e)}
+  document.documentElement.style.setProperty('--tg-viewport-height',(tg.viewportHeight||innerHeight)+'px');
+  if(tg.onEvent)tg.onEvent('viewportChanged',()=>{document.documentElement.style.setProperty('--tg-viewport-height',(tg.viewportHeight||innerHeight)+'px');window.dispatchEvent(new Event('resize'))});
+  window.addEventListener('load',()=>{try{if(tg.isExpanded===false)tg.expand()}catch(e){}});
+}
+
+if(!window.THREE){$('#title').textContent='3D-library niet geladen';$('#desc').textContent='Deze demo heeft internet nodig om Three.js te laden. Open de gehoste versie online.';return}
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x050b18);scene.fog=new THREE.Fog(0x050b18,18,55);
+const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,100);camera.position.set(10,13,18);
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});renderer.setPixelRatio(Math.min(devicePixelRatio,1.8));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+scene.add(new THREE.HemisphereLight(0x78cfff,0x151329,2));
+const key=new THREE.DirectionalLight(0xffffff,3.2);key.position.set(8,16,10);key.castShadow=true;scene.add(key);
+const blue=new THREE.PointLight(0x00aaff,20,24);blue.position.set(-5,4,0);scene.add(blue);
+const goldLight=new THREE.PointLight(0xff9d24,16,20);goldLight.position.set(5,4,-4);scene.add(goldLight);
+const mat=(color,metalness=.35,roughness=.38,emissive=0)=>new THREE.MeshStandardMaterial({color,metalness,roughness,emissive,emissiveIntensity:emissive?1.1:0});
+const groundMat=mat(0x08182a,.25,.7), dark=mat(0x101d31,.7,.32), cyan=mat(0x087fa7,.65,.24,0x003b66), gold=mat(0xb77920,.72,.25,0x472000), glass=mat(0x123e60,.35,.18,0x003d66);
+const ground=new THREE.Mesh(new THREE.CylinderGeometry(10,11,.6,8),groundMat);ground.position.y=-.35;ground.receiveShadow=true;scene.add(ground);
+const grid=new THREE.GridHelper(22,22,0x087da9,0x123653);grid.position.y=-.02;scene.add(grid);
+const city=new THREE.Group();scene.add(city);const pickables=[];
+function box(parent,x,y,z,w,h,d,material, clickable=false){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);if(clickable){m.userData.building=true;pickables.push(m)}return m}
+function building(x,z,w,h,material,index){const g=new THREE.Group();g.position.set(x,0,z);city.add(g);box(g,0,h/2,0,w,h,w,material,true);const crown=box(g,0,h+.12,0,w*.82,.22,w*.82,gold);crown.userData.isCrown=true;for(let y=.55;y<h-.2;y+=.55){for(let sx of [-1,1]){const win=box(g,sx*w*.23,y, w/2+.012,w*.14,.16,.035,cyan);win.userData.isWindow=true;win.userData.baseX=win.position.x;win.userData.baseZ=win.position.z;win.rotation.y=0}}g.userData={level:1,index};g.children.forEach(c=>{c.userData.root=g});return g}
+const buildings=[];
+buildings.push(building(-4,-3,2.0,3.1,glass,0));
+buildings.push(building(0,-4,2.25,4.7,dark,1));
+buildings.push(building(4,-2.5,2.0,2.7,glass,2));
+buildings.push(building(-4,2,2.15,2.2,dark,3));
+buildings.push(building(0,1,2.35,3.2,cyan,4));
+buildings.push(building(4,2.5,2.15,4,gold,5));
+// New districts unlock the wider city grid: 12 upgradeable buildings in total.
+buildings.push(building(-6.2,-3.8,1.45,2.5,cyan,6));
+buildings.push(building(6.2,-3.8,1.45,3.0,gold,7));
+buildings.push(building(-6.2,.2,1.45,3.4,glass,8));
+buildings.push(building(6.2,.2,1.45,2.35,dark,9));
+buildings.push(building(-3.1,5.0,1.55,2.0,gold,10));
+buildings.push(building(3.1,5.0,1.55,2.8,cyan,11));
+for(let i=0;i<18;i++){let a=i*Math.PI*2/18;let x=Math.cos(a)*8.8,z=Math.sin(a)*8.8;let h=1.0+(i%4)*.55;box(city,x,h/2,z,.65,h,.65,i%3?dark:glass)}
+// center vault platform
+const vault=new THREE.Group();vault.position.set(0,0,0);scene.add(vault);
+const base=new THREE.Mesh(new THREE.CylinderGeometry(2.5,2.7,.45,12),dark);base.position.y=.2;base.receiveShadow=true;vault.add(base);
+const door=new THREE.Mesh(new THREE.CylinderGeometry(1.65,1.65,.38,12),mat(0x18283c,.8,.24));door.rotation.x=Math.PI/2;door.position.set(0,1.8,0);vault.add(door);
+const ring=new THREE.Mesh(new THREE.TorusGeometry(1.48,.13,12,12),cyan);ring.position.set(0,1.8,.25);vault.add(ring);
+const gears=[];
+function makeGear(radius,teeth,color,x,y,z){const group=new THREE.Group();group.position.set(x,y,z);vault.add(group);const gearMat=mat(color,.8,.22,color);const core=new THREE.Mesh(new THREE.CylinderGeometry(radius*.72,radius*.72,.22,teeth*2),gearMat);core.rotation.x=Math.PI/2;group.add(core);for(let i=0;i<teeth;i++){const a=i*Math.PI*2/teeth;const tooth=new THREE.Mesh(new THREE.BoxGeometry(radius*.29,.23,radius*.25),gearMat);tooth.position.set(Math.cos(a)*radius*.83,Math.sin(a)*radius*.83,0);group.add(tooth)}const hole=new THREE.Mesh(new THREE.CylinderGeometry(radius*.22,radius*.22,.25,16),dark);hole.rotation.x=Math.PI/2;group.add(hole);const hub=new THREE.Mesh(new THREE.CylinderGeometry(radius*.12,radius*.12,.28,12),mat(0xd5e8f5,.8,.2));hub.rotation.x=Math.PI/2;group.add(hub);gears.push(group);return group}
+makeGear(.66,12,0x12bce8,-.62,1.8,.42);makeGear(.66,12,0xffae26,.62,1.8,.42);makeGear(.45,10,0xa95cff,0,1.02,.55);
+const raycaster=new THREE.Raycaster(), pointer=new THREE.Vector2();let mode='city',coins=12450,selected=null,raidCount=3,spinTime=0,drag=false,lastX=0,lastY=0,theta=.5,phi=1.05,dist=23;
+const SAVE_KEY='sftr_city_save_v1'; let restoringSave=false;
+function saveGame(){if(restoringSave)return;try{localStorage.setItem(SAVE_KEY,JSON.stringify({version:1,coins,levels:buildings.map(b=>b.userData.level),savedAt:Date.now()}))}catch(e){console.warn('SFTR save failed',e)}}
+function loadGame(){try{const raw=localStorage.getItem(SAVE_KEY);if(!raw)return false;const data=JSON.parse(raw);if(!data||data.version!==1||!Array.isArray(data.levels))return false;restoringSave=true;coins=Number.isFinite(data.coins)?Math.max(0,Math.floor(data.coins)):12450;const realCoins=coins;for(let i=0;i<buildings.length;i++){const target=Math.max(1,Math.min(1000,Math.floor(Number(data.levels[i])||1)));selected=buildings[i];while(selected.userData.level<target){coins=Number.MAX_SAFE_INTEGER;upgradeSelected()}}coins=realCoins;selected=null;restoringSave=false;coinsText();return true}catch(e){restoringSave=false;console.warn('SFTR load failed',e);return false}}
+function say(t){$('#toast').textContent=t;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),1900)}
+function updateCamera(){camera.position.set(dist*Math.sin(phi)*Math.sin(theta),dist*Math.cos(phi),dist*Math.sin(phi)*Math.cos(theta));camera.lookAt(0,1,0)}
+updateCamera();
+function setMode(m){mode=m;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));city.visible=m==='city';vault.visible=m==='vault';if(m==='raid'){city.visible=true;vault.visible=false;spinTime=2.3;say('Raid gestart — draai de machine!')}
+if(m==='city'){$('#title').textContent='Neon District';$('#desc').textContent='12 gebouwen om te upgraden. Tik op een gebouw en laat je district groeien.';$('#actions').innerHTML='<button class="primary" id="upgrade">Upgrade · '+(selected?buildingUpgradeCost(selected).toLocaleString('nl-BE'):'500')+'</button>';$('#upgrade').onclick=upgradeSelected;if(selected)updateSelectedBuildingPanel()}
+if(m==='vault'){$('#title').textContent='The Vault';$('#desc').textContent='De tandwielen draaien in elkaar. Kraak de vault voor testcoins.';$('#actions').innerHTML='<button class="primary gold" id="crack">Kraak vault</button>';$('#crack').onclick=crack}
+if(m==='raid'){showRaidBoard()}
+}
+function buildingUpgradeCost(b){return Math.round(500*Math.pow(b.userData.level,1.45)*(1+b.userData.index*.055)/50)*50}
+function updateSelectedBuildingPanel(){
+  if(!selected)return;
+  const level=selected.userData.level, cost=buildingUpgradeCost(selected);
+  $('#title').textContent='Gebouw '+(selected.userData.index+1)+' · Level '+level;
+  $('#desc').innerHTML='Volgende upgrade: <strong style="color:#ffcf62">'+cost.toLocaleString('nl-BE')+' munten</strong> · '+buildings.length+' gebouwen in je stad.';
+  const btn=$('#upgrade');
+  if(btn)btn.textContent='Upgrade · '+cost.toLocaleString('nl-BE');
+}
+function upgradeSelected(){
+  if(!selected){say('Tik eerst op een gebouw in de stad');return}
+  const cost=buildingUpgradeCost(selected);
+  if(coins<cost){say('Niet genoeg testcoins — upgrade kost '+cost.toLocaleString('nl-BE'));return}
+  coins-=cost;selected.userData.level++;
+  // Grow the building while keeping each window attached to its facade.
+  const body=selected.children[0];
+  body.scale.y+=.12;
+  body.position.y+=.06;
+  body.scale.x+=.025;
+  body.scale.z+=.025;
+  selected.children.forEach(part=>{
+    if(part.userData.isWindow){
+      // Keep existing windows attached to the front facade; never scale their height.
+      const side = Math.sign(part.userData.baseX) || 1;
+      part.position.x = side * body.geometry.parameters.width * body.scale.x * .23;
+      part.position.z = body.geometry.parameters.depth * body.scale.z / 2 + .012;
+    }
+  });
+  // Add a new row of windows whenever the growing facade has room for one.
+  const buildingHeight = body.geometry.parameters.height * body.scale.y;
+  const buildingBottom = body.position.y - buildingHeight / 2;
+  const buildingTop = body.position.y + buildingHeight / 2;
+  const windowRows = selected.children.filter(part=>part.userData.isWindow).map(part=>part.position.y);
+  let nextRowY = windowRows.length ? Math.max(...windowRows) + .55 : .55;
+  while(nextRowY < buildingTop - .25){
+    for(const side of [-1,1]){
+      const win=box(selected,
+        side * body.geometry.parameters.width * body.scale.x * .23,
+        nextRowY,
+        body.geometry.parameters.depth * body.scale.z / 2 + .012,
+        body.geometry.parameters.width * body.scale.x * .14,
+        .16,.035,cyan);
+      win.userData.isWindow=true;
+      win.userData.baseX=side;
+      win.userData.baseZ=1;
+      win.userData.root=selected;
+    }
+    nextRowY += .55;
+  }
+  // Add a bright crown to make progress visible.
+  const crown=selected.children.find(c=>c.userData.isCrown);
+  if(crown){crown.position.y+=.12;crown.scale.x+=.025;crown.scale.z+=.025}
+  coinsText();updateSelectedBuildingPanel();saveGame();
+  say('Gebouw geüpgraded naar level '+selected.userData.level);
+}
+function coinsText(){$('#coins').textContent=coins.toLocaleString('nl-BE')}
+function crack(){if(spinTime>0){say('De vault is nog bezig');return}spinTime=2.8;say('Tandwielen grijpen in elkaar…');setTimeout(()=>{const loot=350+Math.floor(Math.random()*850);coins+=loot;coinsText();saveGame();say('Vault gekraakt! +'+loot+' testcoins')},2800)}
+let raidPicks=0, raidLoot=0, raidValues=[], raidFinished=false;
+function showRaidBoard(){
+  raidPicks=0; raidLoot=0; raidFinished=false;
+  // Small payouts keep city upgrades as the main progression path.
+  raidValues=Array.from({length:9},()=> {
+    const r=Math.random();
+    if(r<.12) return 0;
+    if(r<.72) return 25+Math.floor(Math.random()*36); // 25–60
+    if(r<.95) return 65+Math.floor(Math.random()*36); // 65–100
+    return 110+Math.floor(Math.random()*41); // rare 110–150
+  });
+  $('#title').textContent='Raid · kies 3 doelwitten';
+  $('#desc').textContent='Kies drie van de negen kluizen. De buit blijft bewust klein: bouwen is de hoofdstrategie.';
+  $('#actions').innerHTML='<div class="raid-board" id="raidBoard"></div><div class="raid-note" id="raidNote">Gekozen: 0/3 · Beloning verschijnt na elke keuze.</div><button class="primary" id="raidAgain" style="margin-top:9px;display:none">Nieuwe raid</button>';
+  const board=$('#raidBoard');
+  for(let i=0;i<9;i++){
+    const b=document.createElement('button');
+    b.className='raid-target'; b.type='button'; b.textContent='🔒 '+(i+1);
+    b.setAttribute('aria-label','Doelwit '+(i+1));
+    b.addEventListener('click',()=>pickRaidTarget(i,b));
+    board.appendChild(b);
+  }
+  $('#raidAgain').onclick=showRaidBoard;
+}
+function pickRaidTarget(i,button){
+  if(raidFinished || button.disabled || raidPicks>=3) return;
+  button.disabled=true; button.classList.add('revealed');
+  const loot=raidValues[i]; raidPicks++; raidLoot+=loot;
+  button.textContent=loot===0?'💨 Leeg':'🪙 '+loot;
+  $('#raidNote').textContent='Gekozen: '+raidPicks+'/3 · Voorlopige buit: '+raidLoot+' testcoins';
+  say(loot===0?'Deze kluis was leeg!':'Je vond '+loot+' testcoins');
+  if(raidPicks===3){
+    raidFinished=true;
+    coins+=raidLoot; coinsText();saveGame();
+    $('#raidNote').textContent='Raid klaar · +'+raidLoot+' testcoins. Een stadsupgrade kost 500.';
+    $('#raidAgain').style.display='block';
+    say('Raid afgerond: +'+raidLoot+' testcoins');
+  }
+}
+function raid(){showRaidBoard()}
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+// Touch-friendly camera controls: one finger rotates, two fingers pinch-zoom.
+const activePointers = new Map();
+let gestureStart = null, pinchStartDistance = 0, pinchStartZoom = 0, movedDuringGesture = false;
+const pointerDistance = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+canvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  if (activePointers.size === 1) {
+    drag = true; lastX = e.clientX; lastY = e.clientY;
+    gestureStart = {x:e.clientX, y:e.clientY, time:performance.now()};
+    movedDuringGesture = false;
+  } else if (activePointers.size === 2) {
+    const pts = [...activePointers.values()];
+    pinchStartDistance = pointerDistance(pts[0], pts[1]);
+    pinchStartZoom = dist;
+    drag = false;
+    movedDuringGesture = true;
+  }
+});
+canvas.addEventListener('pointermove', e => {
+  if (!activePointers.has(e.pointerId)) return;
+  activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if (activePointers.size >= 2) {
+    const pts = [...activePointers.values()].slice(0,2);
+    const d = pointerDistance(pts[0], pts[1]);
+    if (pinchStartDistance > 0) {
+      dist = Math.max(13, Math.min(32, pinchStartZoom * pinchStartDistance / Math.max(1,d)));
+      updateCamera();
+    }
+    movedDuringGesture = true;
+    return;
+  }
+  if (!drag) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  if (Math.abs(e.clientX-gestureStart.x) + Math.abs(e.clientY-gestureStart.y) > 7) movedDuringGesture = true;
+  theta -= dx * .008;
+  phi = Math.max(.35, Math.min(1.38, phi + dy * .006));
+  lastX = e.clientX; lastY = e.clientY;
+  updateCamera();
+});
+function finishPointer(e) {
+  const wasTap = activePointers.size === 1 && gestureStart &&
+    !movedDuringGesture &&
+    Math.hypot(e.clientX-gestureStart.x, e.clientY-gestureStart.y) < 9;
+  activePointers.delete(e.pointerId);
+  drag = false;
+  if (activePointers.size < 2) pinchStartDistance = 0;
+  if (activePointers.size === 1) {
+    const remaining = [...activePointers.values()][0];
+    lastX = remaining.x; lastY = remaining.y; drag = true;
+    gestureStart = {x:remaining.x, y:remaining.y, time:performance.now()};
+  } else {
+    gestureStart = null;
+  }
+  if (wasTap && mode === 'city') {
+    pointer.x = e.clientX/innerWidth*2-1;
+    pointer.y = -(e.clientY/innerHeight)*2+1;
+    raycaster.setFromCamera(pointer,camera);
+    const hits = raycaster.intersectObjects(pickables,true);
+    if (hits.length) {
+      let obj = hits[0].object;
+      while (obj && !obj.userData.building && !obj.userData.root) obj = obj.parent;
+      selected = obj?.userData.root || obj;
+      if (selected) {
+        updateSelectedBuildingPanel();
+        say('Gebouw geselecteerd');
+      }
+    }
+  }
+}
+canvas.addEventListener('pointerup', finishPointer);
+canvas.addEventListener('pointercancel', e => { activePointers.delete(e.pointerId); drag=false; gestureStart=null; pinchStartDistance=0; });
+canvas.addEventListener('wheel', e => { dist=Math.max(13,Math.min(32,dist+e.deltaY*.018));updateCamera(); }, {passive:true});
+let last=performance.now();function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-last)/1000,.05);last=now;if(spinTime>0){spinTime-=dt;gears.forEach((g,i)=>g.rotation.z+=(i===1?-1:1)*dt*(2.4+i*.4));}else if(mode==='vault'){gears.forEach((g,i)=>g.rotation.z+=(i===1?-1:1)*dt*.18)}else if(mode==='raid'){city.rotation.y+=dt*.03}blue.intensity=18+Math.sin(now*.002)*3;renderer.render(scene,camera)}
+requestAnimationFrame(animate);const hadSave=loadGame();addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});say(hadSave?'SFTR geladen — voortgang hersteld':'Welkom in SFTR 3D');
+})();
+</script>
+</body></html>
